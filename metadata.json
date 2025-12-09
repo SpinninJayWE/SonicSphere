@@ -1,0 +1,5 @@
+{
+  "name": "SonicSphere Visualizer",
+  "description": "An immersive 3D audio visualization experience that adapts to your music's mood and album art using Gemini AI.",
+  "requestFramePermissions": []
+}
