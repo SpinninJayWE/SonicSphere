@@ -94,7 +94,7 @@ const PlayerControls: React.FC<PlayerControlsProps> = ({
     }
   };
 
-  const visualizerOptions: VisualizerMode[] = ['Orb', 'Bars', 'Cube', 'Vinyl'];
+  const visualizerOptions: VisualizerMode[] = ['Orb', 'Bars', 'Cube', 'Vinyl', 'Tunnel', 'Matrix'];
   const themeOptions: ThemeMode[] = ['Dynamic', 'Default', 'Fire', 'Ice', 'Forest'];
 
   return (

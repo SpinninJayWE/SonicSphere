@@ -11,6 +11,7 @@ declare global {
     interface IntrinsicElements {
       instancedMesh: any;
       boxGeometry: any;
+      torusGeometry: any;
       meshStandardMaterial: any;
       mesh: any;
       group: any;
@@ -213,6 +214,126 @@ const ReactiveVinyl = ({ analyser, theme, coverArt }: { analyser: AnalyserNode |
     );
 };
 
+// --- MODE: TUNNEL ---
+const ReactiveTunnel = ({ analyser, theme }: { analyser: AnalyserNode | null; theme: Theme }) => {
+    const count = 40;
+    const meshRef = useRef<THREE.InstancedMesh>(null);
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+    const { dataArray, getData } = useAudioData(analyser);
+    
+    // Track "virtual" distance traveled
+    const distanceRef = useRef(0);
+
+    useFrame((state, delta) => {
+        if (!meshRef.current) return;
+        getData();
+
+        let bassSum = 0;
+        for (let i = 0; i < 20; i++) bassSum += dataArray[i];
+        const bass = (bassSum / 20) / 255; // 0..1
+
+        // Speed increases with bass
+        const speed = 5 + bass * 30;
+        distanceRef.current += speed * delta;
+
+        for (let i = 0; i < count; i++) {
+            const totalLength = 120;
+            const spacing = totalLength / count;
+            // Loop positions. Map infinite distance to finite range -80 to 40
+            const zPos = ((i * spacing + distanceRef.current) % totalLength) - 80; 
+            
+            dummy.position.set(0, 0, zPos);
+            // Spin visual
+            dummy.rotation.z = (distanceRef.current * 0.02) + i * 0.1;
+            
+            // Pulse radius with bass intensity
+            const scale = 1 + Math.pow(bass, 2) * 1.5; 
+            dummy.scale.set(scale, scale, 1);
+            
+            dummy.updateMatrix();
+            meshRef.current.setMatrixAt(i, dummy.matrix);
+            
+            // Color gradient based on depth (fog effect)
+            // Far (-80) -> Transparent/Dark, Near (40) -> Bright
+            const depth = THREE.MathUtils.clamp((zPos + 80) / 100, 0, 1);
+            const color = new THREE.Color(theme.secondary).lerp(new THREE.Color(theme.primary), depth);
+            
+            // Flash accent on heavy beats
+            if(bass > 0.5) {
+                color.lerp(new THREE.Color(theme.accent), (bass - 0.5));
+            }
+            
+            meshRef.current.setColorAt(i, color);
+        }
+        meshRef.current.instanceMatrix.needsUpdate = true;
+        if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    });
+
+    return (
+        <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
+            <torusGeometry args={[4, 0.05, 4, 24]} /> {/* Square-ish rings for digital look */}
+            <meshStandardMaterial wireframe color="white" toneMapped={false} />
+        </instancedMesh>
+    );
+};
+
+// --- MODE: MATRIX ---
+const ReactiveMatrix = ({ analyser, theme }: { analyser: AnalyserNode | null; theme: Theme }) => {
+    const size = 16;
+    const count = size * size;
+    const meshRef = useRef<THREE.InstancedMesh>(null);
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+    const { dataArray, getData } = useAudioData(analyser);
+
+    useFrame((state) => {
+        if (!meshRef.current) return;
+        getData();
+        
+        for (let i = 0; i < count; i++) {
+            const row = Math.floor(i / size);
+            const col = i % size;
+            
+            const x = (col - size / 2) * 1.2;
+            const z = (row - size / 2) * 1.2;
+            
+            // Calculate distance from center to map to frequency bands
+            // Center = low freq, Edges = high freq
+            const dist = Math.sqrt(x*x + z*z);
+            const maxDist = Math.sqrt((size/2*1.2)**2 + (size/2*1.2)**2);
+            const normDist = dist / maxDist;
+            
+            // Map 0..1 to array index 0..60 (sub-bass to low-mids mostly)
+            const freqIndex = Math.floor(normDist * 50); 
+            const value = dataArray[freqIndex] / 255;
+            
+            dummy.position.set(x, -5, z); // Place effectively as a floor
+            
+            // Scale Y based on volume
+            const height = 0.1 + value * 10;
+            dummy.scale.set(1, height, 1);
+            dummy.position.y = -5 + height / 2; 
+            
+            dummy.updateMatrix();
+            meshRef.current.setMatrixAt(i, dummy.matrix);
+            
+            // Color map
+            const color = new THREE.Color(theme.primary).lerp(new THREE.Color(theme.accent), value);
+            meshRef.current.setColorAt(i, color);
+        }
+        meshRef.current.instanceMatrix.needsUpdate = true;
+        if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    });
+
+    return (
+        <group rotation={[-Math.PI / 6, 0, 0]}> {/* Tilt grid slightly */}
+            <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
+                <boxGeometry args={[1, 1, 1]} />
+                <meshStandardMaterial roughness={0.1} metalness={0.8} />
+            </instancedMesh>
+        </group>
+    )
+}
+
 
 // --- PARTICLES (Shared) ---
 const ReactiveParticles = ({ analyser, theme }: { analyser: AnalyserNode | null, theme: Theme }) => {
@@ -296,6 +417,8 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, theme, mode
         {mode === 'Bars' && <ReactiveBars analyser={analyser} theme={theme} />}
         {mode === 'Cube' && <ReactiveCube analyser={analyser} theme={theme} />}
         {mode === 'Vinyl' && <ReactiveVinyl analyser={analyser} theme={theme} coverArt={coverArt} />}
+        {mode === 'Tunnel' && <ReactiveTunnel analyser={analyser} theme={theme} />}
+        {mode === 'Matrix' && <ReactiveMatrix analyser={analyser} theme={theme} />}
         
         <ReactiveParticles analyser={analyser} theme={theme} />
         

@@ -30,7 +30,7 @@ export interface AudioAnalysisData {
   average: number;
 }
 
-export type VisualizerMode = 'Orb' | 'Bars' | 'Cube' | 'Vinyl';
+export type VisualizerMode = 'Orb' | 'Bars' | 'Cube' | 'Vinyl' | 'Tunnel' | 'Matrix';
 export type ThemeMode = 'Dynamic' | 'Default' | 'Fire' | 'Ice' | 'Forest';
 
 export interface Preset {
