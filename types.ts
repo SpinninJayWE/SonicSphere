@@ -12,7 +12,7 @@ export interface Track {
   url: string;
   type: 'file' | 'url';
   file?: File;
-  coverArt?: string; // Base64 string
+  coverArt?: string; // Base64 string or Blob URL
   theme?: Theme;
 }
 
@@ -28,4 +28,14 @@ export interface AudioAnalysisData {
   mid: number;
   treble: number;
   average: number;
+}
+
+export type VisualizerMode = 'Orb' | 'Bars' | 'Cube' | 'Vinyl';
+export type ThemeMode = 'Dynamic' | 'Default' | 'Fire' | 'Ice' | 'Forest';
+
+export interface Preset {
+    id: string;
+    name: string;
+    visualizer: VisualizerMode;
+    themeMode: ThemeMode;
 }

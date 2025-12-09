@@ -3,8 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import AudioVisualizer from './components/AudioVisualizer';
 import PlayerControls from './components/PlayerControls';
 import PlaylistSidebar from './components/PlaylistSidebar';
-import { Track, Theme } from './types';
-import { DEFAULT_THEME, SAMPLE_RATE, DEFAULT_COVER_ART } from './constants';
+import { Track, Theme, VisualizerMode, ThemeMode } from './types';
+import { DEFAULT_THEME, SAMPLE_RATE, DEFAULT_COVER_ART, THEME_PRESETS } from './constants';
 import { extractAlbumArt } from './utils/audioUtils';
 import { analyzeAlbumArt } from './services/geminiService';
 
@@ -16,6 +16,14 @@ const App: React.FC = () => {
   const [volume, setVolume] = useState(0.8);
   const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
   
+  // Time State
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  
+  // Visuals State
+  const [visualizerMode, setVisualizerMode] = useState<VisualizerMode>('Orb');
+  const [themeMode, setThemeMode] = useState<ThemeMode>('Dynamic');
+  
   // Audio Refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -24,10 +32,8 @@ const App: React.FC = () => {
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null); // For React render triggers
 
   // Refs for data persistence
-  const currentThemeRef = useRef<Theme>(DEFAULT_THEME);
-  // Force re-render for theme updates
-  const [, setTick] = useState(0); 
-
+  const [activeTheme, setActiveTheme] = useState<Theme>(DEFAULT_THEME);
+  
   // Initialize Audio Context on user interaction
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -45,8 +51,17 @@ const App: React.FC = () => {
       sourceRef.current.connect(analyserRef.current);
       analyserRef.current.connect(audioContextRef.current.destination);
       
-      // Handle track ending
+      // Handle events
       audioRef.current.addEventListener('ended', handleTrackEnd);
+      audioRef.current.addEventListener('timeupdate', () => {
+          if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+      });
+      audioRef.current.addEventListener('loadedmetadata', () => {
+          if (audioRef.current) {
+              setDuration(audioRef.current.duration);
+              setIsPlaying(!audioRef.current.paused);
+          }
+      });
     }
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
@@ -55,6 +70,13 @@ const App: React.FC = () => {
 
   const handleTrackEnd = () => {
      handleNext();
+  };
+
+  const handleSeek = (time: number) => {
+      if (audioRef.current) {
+          audioRef.current.currentTime = time;
+          setCurrentTime(time);
+      }
   };
 
   const handleNext = useCallback(() => {
@@ -103,11 +125,9 @@ const App: React.FC = () => {
       
       // Update Audio Source and Handle CORS
       if (track.type === 'file' && track.file) {
-        // Local files (blobs) should not have crossOrigin set to anonymous or they might be treated as tainted
         audio.removeAttribute('crossOrigin');
         audio.src = URL.createObjectURL(track.file);
       } else {
-        // Remote URLs need anonymous CORS to allow audio analysis
         audio.crossOrigin = "anonymous";
         audio.src = track.url;
       }
@@ -125,23 +145,31 @@ const App: React.FC = () => {
              const theme = await analyzeAlbumArt(artToAnalyze);
              if (theme) {
                  updateTrackTheme(track.id, theme);
-                 currentThemeRef.current = theme;
-             } else {
-                 currentThemeRef.current = DEFAULT_THEME;
-             }
-         } else {
-             currentThemeRef.current = DEFAULT_THEME;
-         }
-         setTick(t => t + 1); // Force re-render of Visualizer with new theme
-      } else {
-          currentThemeRef.current = track.theme;
-          setTick(t => t + 1);
+             } 
+         } 
       }
     };
 
     loadTrack();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrackIndex, playlist.length]); 
+
+  // Update Active Theme based on Track or Selection
+  useEffect(() => {
+      const currentTrack = currentTrackIndex >= 0 ? playlist[currentTrackIndex] : null;
+
+      if (themeMode === 'Dynamic') {
+          if (currentTrack?.theme) {
+              setActiveTheme(currentTrack.theme);
+          } else {
+              setActiveTheme(DEFAULT_THEME);
+          }
+      } else {
+          // Use preset
+          const preset = THEME_PRESETS[themeMode] || DEFAULT_THEME;
+          setActiveTheme(preset);
+      }
+  }, [themeMode, currentTrackIndex, playlist]); // React to playlist changes if theme is updated async
 
   const updateTrackTheme = (id: string, theme: Theme) => {
       setPlaylist(prev => prev.map(t => t.id === id ? { ...t, theme } : t));
@@ -261,7 +289,9 @@ const App: React.FC = () => {
       {/* 3D Visualizer Background */}
       <AudioVisualizer 
         analyser={analyserNode} 
-        theme={currentThemeRef.current}
+        theme={activeTheme}
+        mode={visualizerMode}
+        coverArt={currentTrack?.coverArt}
       />
 
       {/* Intro Overlay if no audio context */}
@@ -311,6 +341,14 @@ const App: React.FC = () => {
         onFileUpload={handleFileUpload}
         onUrlUpload={handleUrlUpload}
         togglePlaylist={() => setIsPlaylistOpen(!isPlaylistOpen)}
+        
+        visualizerMode={visualizerMode}
+        onVisualizerChange={setVisualizerMode}
+        themeMode={themeMode}
+        onThemeChange={setThemeMode}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
       />
     </div>
   );
