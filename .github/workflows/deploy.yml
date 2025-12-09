@@ -1,6 +1,6 @@
 # .github/workflows/deploy.yml
 
-name: Deploy Scale_generator to GitHub Pages
+name: Deploy SonicSphere to GitHub Pages
 
 on:
   # 监听 main 分支的 push 事件，实现自动部署
